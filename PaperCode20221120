@@ -1,0 +1,473 @@
+package com.parper;
+
+/**
+ * Created by jiangxin on 22/9/12.
+ */
+public class PaperCode20221120 {
+
+    public static java.util.Map<String, String> detailDataMap = new java.util.HashMap<String, String>();
+    public static java.util.Set<String> iso3DataSet = new java.util.HashSet<String>();
+    public static java.util.Set<String> companyProductSet = new java.util.LinkedHashSet<String>();
+
+    public static java.util.Map<String, PaperCode20221120.MaxMinYear> companyYearMap =
+            new java.util.HashMap<String, PaperCode20221120.MaxMinYear>();
+
+    public static java.util.Map<String, java.util.List<String>> companyYearToISOMap =
+            new java.util.HashMap<String, java.util.List<String>>();
+
+    public static java.util.Map<String, java.util.Set<String>> companyYearISOToProductMap =
+            new java.util.HashMap<String, java.util.Set<String>>();
+
+    public static String detailDataPath = "/Users/jiangxin/Downloads/1119数据处理邻居市场/09-15 firm destination for market.csv";
+    public static String iso3DataPath = "/Users/jiangxin/Downloads/1119数据处理邻居市场/09-15 firm variety destination for market.csv";
+    public static String distanceOutputPath = "/Users/jiangxin/Downloads/hejinqiu/distance.csv";
+    public static String neighbourOutputPath = "/Users/jiangxin/Downloads/hejinqiu/neighbour.csv";
+
+    public static String administrativeDistancePath = "/Users/jiangxin/Downloads/1119数据处理邻居市场/administrative_distance.csv";
+    public static String geographicDistancePath = "/Users/jiangxin/Downloads/1119数据处理邻居市场/geographic_distance.csv";
+    public static String politicalDistancePath = "/Users/jiangxin/Downloads/1119数据处理邻居市场/political_distance.csv";
+
+    public static java.util.Map<String, Integer> administrativeTitleMap = new java.util.HashMap<String, Integer>();
+    public static java.util.List<java.util.List<Double>> administrativeDistanceList = new java.util.ArrayList<java.util.List<Double>>();
+
+    public static java.util.Map<String, Integer> geographicTitleMap = new java.util.HashMap<>();
+    public static java.util.List<java.util.List<Double>> geographicDistanceList = new java.util.ArrayList<>();
+
+    public static java.util.Map<String, Integer> politicalTitleMap = new java.util.HashMap<>();
+    public static java.util.List<java.util.List<Double>> politicalDistanceList = new java.util.ArrayList<>();
+
+    public static java.util.Map<String, java.util.Set<String>> hs96ISO3YearKeyOfCityMap = new java.util.HashMap<String, java.util.Set<String>>();
+    public static java.util.Map<String, java.util.Set<String>> hs96ISO3YearKeyOfProvinceMap = new java.util.HashMap<String, java.util.Set<String>>();
+
+    public static String title = "coid,hs96,ISO3,year,vcexp,indcode,last_year_vcexp" +
+            ",adm_nearest_iso,adm_nearest_iso_vcexp,adm_nearest_iso_distance" +
+            ",geo_nearest_iso,geo_nearest_iso_vcexp,geo_nearest_iso_distance";
+
+//    public static String titleForNeighbour = "coid,hs96,ISO3,year,vcexp,indcode,last_year_vcexp" +
+//            "city_neighbour_company_num,province_neighbour_company_num"+
+//            ",city_neighbour_company_vcexp_average,city_neighbour_company_vcexp_max,city_neighbour_company_vcexp_min" +
+//            ",province_neighbour_company_vcexp_average,province_neighbour_company_vcexp_max,province_neighbour_company_vcexp_min";
+
+    public static String titleForNeighbour = "year,coid,cpynm,ISO3,fcexp," +
+            "clst_adm,clst_geo,clst_pol," +
+            "cadmdistance,cgeodistance,cpoldistance," +
+            "adm_same_product_num,geo_same_product_num,pol_same_product_num," +
+            "adm_same_products,geo_same_products,pol_same_products";
+
+    public static void main(String args[]) throws java.io.IOException {
+
+        long startTime = System.currentTimeMillis();
+
+        readCsvFile(detailDataPath);
+        long endTime = System.currentTimeMillis();
+        System.out.println("readCsvFile cost time: " + (endTime - startTime) / (1000 * 60) + "min");
+
+        readISOCsvFile(iso3DataPath);
+
+        readDistanceFile(administrativeDistancePath, administrativeTitleMap, administrativeDistanceList);
+        readDistanceFile(geographicDistancePath, geographicTitleMap, geographicDistanceList);
+        readDistanceFile(politicalDistancePath, politicalTitleMap, politicalDistanceList);
+
+        System.out.println("administrativeTitleMap: " + administrativeTitleMap);
+
+        writeCSV(detailDataPath, distanceOutputPath);
+
+        endTime = System.currentTimeMillis();
+        System.out.println("cost time: " + (endTime - startTime) / (1000 * 60) + "min");
+
+        System.out.println("end");
+    }
+
+    public final static boolean isNumeric(String s) {
+        if (s != null && !"".equals(s.trim())) {
+            return s.matches("^[0-9]*$");
+        } else {
+            return false;
+        }
+    }
+
+    private static String getNearestDistance(String companyProduct, int year, String nowDest) {
+
+        String adminNearestCountry = "";
+        String adminNearestCountryDistance = "";
+        String geoNearestCountry = "";
+        String geoNearestCountryDistance = "";
+        String politicalNearestCountry = "";
+        String politicalNearestCountryDistance = "";
+
+
+        String key = companyProduct + "_" + year;
+        java.util.List<String> destList = companyYearToISOMap.get(key);
+
+        Double minAdminDistance = -1D;
+        Double minGeoDistance = -1D;
+        Double minPoliticalDistance = -1D;
+
+        if (destList == null || destList.size() == 0) {
+
+        } else {
+            for (String lastDest : destList) {
+                Integer lastDestCode = administrativeTitleMap.get(lastDest);
+                Integer nowDestCode = administrativeTitleMap.get(nowDest);
+                if (lastDestCode != null && nowDestCode != null && !nowDest.equals(lastDest)) {
+                    Double adminDistance = (lastDestCode > nowDestCode) ?
+                            administrativeDistanceList.get(lastDestCode).get(nowDestCode) :
+                            administrativeDistanceList.get(nowDestCode).get(lastDestCode);
+
+                    if (minAdminDistance == -1 || adminDistance < minAdminDistance) {
+                        adminNearestCountry = lastDest;
+                        minAdminDistance = adminDistance;
+                    }
+
+                }
+
+                lastDestCode = geographicTitleMap.get(lastDest);
+                nowDestCode = geographicTitleMap.get(nowDest);
+
+                if (lastDestCode != null && nowDestCode != null && !nowDest.equals(lastDest)) {
+                    Double geoDistance = (lastDestCode > nowDestCode) ?
+                            geographicDistanceList.get(lastDestCode).get(nowDestCode) :
+                            geographicDistanceList.get(nowDestCode).get(lastDestCode);
+
+                    if (minGeoDistance == -1 || geoDistance < minGeoDistance) {
+                        geoNearestCountry = lastDest;
+                        minGeoDistance = geoDistance;
+                    }
+                }
+
+                lastDestCode = politicalTitleMap.get(lastDest);
+                nowDestCode = politicalTitleMap.get(nowDest);
+                if (lastDestCode != null && nowDestCode != null && !nowDest.equals(lastDest)) {
+                    Double politicalDistance = (lastDestCode > nowDestCode) ?
+                            politicalDistanceList.get(lastDestCode).get(nowDestCode) :
+                            politicalDistanceList.get(nowDestCode).get(lastDestCode);
+
+                    if (minPoliticalDistance == -1 || politicalDistance < minPoliticalDistance) {
+                        politicalNearestCountry = lastDest;
+                        minPoliticalDistance = politicalDistance;
+                    }
+                }
+             }
+        }
+
+        if (minAdminDistance != -1) {
+            adminNearestCountryDistance = String.valueOf(minAdminDistance);
+        }
+
+        if (minGeoDistance != -1) {
+            geoNearestCountryDistance = String.valueOf(minGeoDistance);
+        }
+
+        if (minPoliticalDistance != -1) {
+            politicalNearestCountryDistance = String.valueOf(minPoliticalDistance);
+        }
+
+        String result = adminNearestCountry + "," + adminNearestCountryDistance +
+                "," + geoNearestCountry + "," + geoNearestCountryDistance +
+                "," + politicalNearestCountry  + "," + politicalNearestCountryDistance;
+
+        return result;
+    }
+
+    private static void readDistanceFile(String distancePath, java.util.Map<String, Integer> distanceTitleMap, java.util.List<java.util.List<Double>> distanceList) {
+        int lineCount = 0;
+
+        try {
+            java.io.BufferedReader reader =
+                    new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(distancePath), "utf8"));
+
+            String line = null;
+            while ((line = reader.readLine()) != null) {
+                if (lineCount == 0) {
+                    String[] array = line.split(",", -1);
+                    int len = array.length;
+
+                    for (int i = 1; i < len; i++) {
+                        distanceTitleMap.put(array[i], i - 1);
+                    }
+
+                    lineCount++;
+                } else {
+                    String[] array = line.split(",", -1);
+                    int len = lineCount;
+                    java.util.List<Double> tempList = new java.util.ArrayList<>();
+
+                    for (int i = 1; i < len + 1; i++) {
+                        Double data = (array[i] == null || "".equals(array[i])) ? 0.0 :
+                                Double.parseDouble(array[i]);
+
+                        tempList.add(data);
+                    }
+
+                    distanceList.add(tempList);
+
+                    lineCount++;
+                }
+
+            }
+
+        } catch (java.io.FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (java.io.UnsupportedEncodingException e) {
+            e.printStackTrace();
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void writeCSV(String inputPath, String outputPath) {
+        java.io.BufferedWriter output;
+
+        try {
+            output = new java.io.BufferedWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(outputPath), "UTF-8"));
+
+            output.write(titleForNeighbour);
+            output.newLine();
+
+            java.io.BufferedReader reader =
+                    new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(inputPath), "utf-8"));
+
+            System.out.println("title info: " + reader.readLine());
+            String line = null;
+            while ((line = reader.readLine()) != null) {
+                String item[] = line.split(",", -1);
+
+                Integer year = Integer.parseInt(item[0]); // 4
+                String coid = item[1];
+                String company = item[2]; // 1
+                String iso = item[3]; // 3
+
+                Integer lastYear = year - 1;
+                company = (coid == null || coid.equals("")) ? company : coid;
+                String companyYearISOKey = company + "_" + year + "_" + iso;
+
+
+                // adminNearestCountry + "," + adminNearestCountryDistance +
+//                "," + geoNearestCountry + "," + geoNearestCountryDistance +
+//                        "," + politicalNearestCountry  + "," + politicalNearestCountryDistance;
+                String nearestDistanceStr = getNearestDistance(company, lastYear, iso);
+                String[] nearestDistanceArray = nearestDistanceStr.split(",", -1);
+                String adminNearestCountry = nearestDistanceArray[0];
+                String geoNearestCountry = nearestDistanceArray[2];
+                String politicalNearestCountry = nearestDistanceArray[4];
+
+                String companyLastYearAdminISOKey = company + "_" + lastYear + "_" + adminNearestCountry;
+                String companyLastYearGeoISOKey = company + "_" + lastYear + "_" + geoNearestCountry;
+                String companyLastYearPoliticalISOKey = company + "_" + lastYear + "_" + politicalNearestCountry;
+
+                java.util.Set<String> thisYearProductSet = companyYearISOToProductMap.getOrDefault(companyYearISOKey, new java.util.HashSet<>());
+                java.util.Set<String> lastYearAdminProductSet = companyYearISOToProductMap.getOrDefault(companyLastYearAdminISOKey, new java.util.HashSet<>());
+                java.util.Set<String> lastYearGeoProductSet = companyYearISOToProductMap.getOrDefault(companyLastYearGeoISOKey, new java.util.HashSet<>());
+                java.util.Set<String> lastYearPoliticalProductSet = companyYearISOToProductMap.getOrDefault(companyLastYearPoliticalISOKey, new java.util.HashSet<>());
+
+                java.util.List<String> adminResult = getIntersectionOfTwoSet(thisYearProductSet, lastYearAdminProductSet);
+                java.util.List<String> geoResult = getIntersectionOfTwoSet(thisYearProductSet, lastYearGeoProductSet);
+                java.util.List<String> politicalResult = getIntersectionOfTwoSet(thisYearProductSet, lastYearPoliticalProductSet);
+
+                String intersectionResult = adminResult.size() + "," + geoResult.size() + "," + politicalResult.size()
+                        + "," + com.sun.deploy.util.StringUtils.join(adminResult, "|")
+                        + "," + com.sun.deploy.util.StringUtils.join(geoResult, "|")
+                        + "," + com.sun.deploy.util.StringUtils.join(politicalResult, "|");
+
+                String newLine = line + "," + nearestDistanceStr + "," + intersectionResult;
+
+                output.write(newLine);
+                output.newLine();
+            }
+
+            output.flush();
+            output.close();
+        } catch (java.io.FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (java.io.UnsupportedEncodingException e) {
+            e.printStackTrace();
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static java.util.List<String> getIntersectionOfTwoSet(java.util.Set<String> set1, java.util.Set<String> set2) {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        set1.stream().forEach(a1 -> {
+            if (set2.contains(a1)) {
+                list.add(a1);
+            }
+        });
+
+        return list.stream().sorted().collect(java.util.stream.Collectors.toList());
+    }
+
+    public static String mkString(String[] strArray) {
+        StringBuffer sb = new StringBuffer();
+        for (String str : strArray) {
+            sb.append(str).append(",");
+        }
+        String resStr = sb.toString();
+        return resStr.substring(0, resStr.length() - 1);
+    }
+
+    public static void readISOCsvFile(String path) {
+        try {
+            java.io.BufferedReader reader =
+                    new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(path), "utf-8"));
+
+//            year	年份
+//            coid	企业数字编号，纯数字
+//            cpynm	企业名称
+//            ISO3	英文字母三位出口目的地代码
+//            fcexp	企业hs96产品当年在ISO3的出口额
+//            year,coid,cpynm,hs96,vcexp,ISO3
+
+            System.out.println("readISOCsvFile title info: " + reader.readLine());
+            String line = null;
+            while ((line = reader.readLine()) != null) {
+                String item[] = line.split(",", -1);
+
+                Integer year = Integer.parseInt(item[0]); // 4
+                String coid = item[1];
+                String company = item[2]; // 1
+                String hs96 = item[3]; // 3
+                String iso3 = item[5];
+
+                company = (coid == null || coid.equals("")) ? company : coid;
+                String companyYearISOKey = company + "_" + year + "_" + iso3;
+
+                if (new java.util.Random().nextInt(10000000) == 1) {
+                    System.out.println("line : " + line + ", key: " + companyYearISOKey);
+                }
+
+                java.util.Set<String> tempList = companyYearISOToProductMap.getOrDefault(companyYearISOKey, new java.util.HashSet<String>());
+                tempList.add(hs96);
+                companyYearISOToProductMap.put(companyYearISOKey, tempList);
+            }
+        } catch (java.io.FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (java.io.UnsupportedEncodingException e) {
+            e.printStackTrace();
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void readCsvFile(String path) {
+        try {
+            java.io.BufferedReader reader =
+                    new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(path), "utf-8"));
+
+//            year	年份
+//            coid	企业数字编号，纯数字
+//            cpynm	企业名称
+//            ISO3	英文字母三位出口目的地代码
+//            fcexp	企业hs96产品当年在ISO3的出口额
+//            year,coid,cpynm,ISO3,fcexp
+
+            System.out.println("title info: " + reader.readLine());
+            String line = null;
+            while ((line = reader.readLine()) != null) {
+                String item[] = line.split(",", -1);
+
+                Integer year = Integer.parseInt(item[0]); // 4
+                String coid = item[1]; // 1
+                String company = item[2]; // 1
+                String iso = item[3]; // 3
+
+                company = (coid == null || coid.equals("")) ? company : coid;
+                String companyYearKey = company + "_" + year;
+                String key = companyYearKey + "_" + iso;
+                if (new java.util.Random().nextInt(1000000) == 1) {
+                    System.out.println("line : " + line + ", key: " + companyYearKey);
+                }
+
+//                detailDataMap.put(key, line);
+
+                java.util.List<String> tempList = companyYearToISOMap.getOrDefault(companyYearKey, new java.util.ArrayList<String>());
+                tempList.add(iso);
+                companyYearToISOMap.put(companyYearKey, tempList);
+
+                /*
+                if (!companyYearMap.containsKey(company)) {
+                    MaxMinYear maxMinYear = new PaperCode20221120.MaxMinYear(year, year, iso, iso);
+                    companyYearMap.put(company, maxMinYear);
+                } else {
+                    MaxMinYear maxMinYear = companyYearMap.get(company);
+                    int minYear = maxMinYear.getMinYear();
+                    int maxYear = maxMinYear.getMaxYear();
+
+                    if (year < minYear) {
+                        maxMinYear.setMinYear(year);
+                        maxMinYear.setMinYearISO(iso);
+                    }
+
+                    if (year > maxYear) {
+                        maxMinYear.setMaxYear(year);
+                        maxMinYear.setMaxYearISO(iso);
+                    }
+
+                    companyYearMap.put(company, maxMinYear);
+                }
+                */
+            }
+        } catch (java.io.FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (java.io.UnsupportedEncodingException e) {
+            e.printStackTrace();
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public static class MaxMinYear {
+        public int maxYear;
+        public int minYear;
+
+        public String minYearISO;
+        public String maxYearISO;
+
+        public int getMaxYear() {
+            return maxYear;
+        }
+
+        public void setMaxYear(int maxYear) {
+            this.maxYear = maxYear;
+        }
+
+        public int getMinYear() {
+            return minYear;
+        }
+
+        public void setMinYear(int minYear) {
+            this.minYear = minYear;
+        }
+
+        public String getMinYearISO() {
+            return minYearISO;
+        }
+
+        public void setMinYearISO(String minYearISO) {
+            this.minYearISO = minYearISO;
+        }
+
+        public String getMaxYearISO() {
+            return maxYearISO;
+        }
+
+        public void setMaxYearISO(String maxYearISO) {
+            this.maxYearISO = maxYearISO;
+        }
+
+        public MaxMinYear(int maxYear, int minYear, String minYearISO, String maxYearISO) {
+            this.maxYear = maxYear;
+            this.minYear = minYear;
+            this.minYearISO = minYearISO;
+            this.maxYearISO = maxYearISO;
+        }
+    }
+
+}
+
+
+
+
+
+
